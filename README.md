@@ -61,6 +61,7 @@ services:
       - --set redpanda.cloud_storage_segment_max_upload_interval_sec=30
     ports:
       - 9092:9092
+      - 9644:9644
     volumes:
       - ./volumes/redpanda/data:/var/lib/redpanda/data
 ```
