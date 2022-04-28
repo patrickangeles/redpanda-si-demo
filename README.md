@@ -65,9 +65,56 @@ services:
       - ./volumes/redpanda/data:/var/lib/redpanda/data
 ```
 
-## Start up with Docker Compose
+## Start up the Docker Compose
 
 ```bash
 docker compose up -d
+```
+
+## Set up Minio 
+
+Create an alias and an S3 bucket for Redpanda
+
+```bash
+mc alias set local http://localhost:9000 minio minio123
+mc mb local/redpanda
+```
+
+## Create a topic 
+
+You can see what the current directory structure looks like with `tree`
+
+```bash
+tree volumes
+```
+
+```bash
+rpk topic create thelog \
+        -c retention.bytes=100000 \
+        -c segment.bytes=10000 \
+        -c redpanda.remote.read=false \
+        -c redpanda.remote.write=false
+```
+
+Look again to see that the directory structure has changed.
+
+```bash
+tree volumes
+```
+
+## Produce some data
+
+```bash
+BATCH=$(date) ; printf "$BATCH %s\n" {1..1000} | rpk topic produce thelog
+```
+
+Repeat this a few times, while checking the directory structure with `tree volumes`
+
+## Enable Shadow Indexing for our topic
+
+```bash
+rpk topic alter-config thelog \
+        -s redpanda.remote.read=true \
+        -s redpanda.remote.write=true
 ```
 
