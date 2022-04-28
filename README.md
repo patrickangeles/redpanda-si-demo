@@ -205,13 +205,41 @@ volumes/redpanda/data/kafka
         ├── archival_metadata.snapshot
         └── snapshot
 ```
+When you consume from the topic, you will no longer see data from the first segment.
+Here, our consumer sees offset 2000 as the earliest available.
 
-## Enable Shadow Indexing for our topic
+```
+$ rpk topic consume thelog -n 3
+{
+  "topic": "thelog",
+  "value": "Thu Apr 28 10:29:21 EDT 2022 1",
+  "timestamp": 1651156161377,
+  "partition": 0,
+  "offset": 2000
+}
+{
+  "topic": "thelog",
+  "value": "Thu Apr 28 10:29:21 EDT 2022 2",
+  "timestamp": 1651156161377,
+  "partition": 0,
+  "offset": 2001
+}
+{
+  "topic": "thelog",
+  "value": "Thu Apr 28 10:29:21 EDT 2022 3",
+  "timestamp": 1651156161377,
+  "partition": 0,
+  "offset": 2002
+}
+```
+
+## Enable Shadow Indexing
+
+Now let's turn on Shadow Indexing
 
 ```bash
-rpk topic alter-config thelog \
-        -s redpanda.remote.read=true \
-        -s redpanda.remote.write=true
+rpk topic alter-config thelog -s redpanda.remote.read=true
+rpk topic alter-config thelog -s redpanda.remote.write=true
 ```
 
 After a few seconds, then you'll notice that log segments have been uploaded and now show up on MinIO.
@@ -261,4 +289,61 @@ volumes/minio/data
             └── thelog
                 └── 0_3
                     └── 10001-1-v1.log.1
+```
+
+Now, let's produce more data such that the oldest log segments (starting with offset 2000) start to disappear.
+
+```bash
+BATCH=$(date) ; printf "$BATCH %s\n" {1..1000} | rpk topic produce thelog
+```
+
+Repeat that a few times until some segments get cleaned up (deleted) from the Redpanda data dir.
+Here, the segments `2001-1-v1.log` and `4001-1-v1.log` have been deleted.
+
+```
+$ tree volumes/redpanda/data/kafka
+volumes/redpanda/data/kafka
+└── thelog
+    └── 0_2
+        ├── 10001-1-v1.base_index
+        ├── 10001-1-v1.log
+        ├── 12001-1-v1.base_index
+        ├── 12001-1-v1.log
+        ├── 14007-1-v1.base_index
+        ├── 14007-1-v1.log
+        ├── 16008-1-v1.base_index
+        ├── 16008-1-v1.log
+        ├── 6001-1-v1.base_index
+        ├── 6001-1-v1.log
+        ├── 8001-1-v1.base_index
+        ├── 8001-1-v1.log
+        ├── archival_metadata.snapshot
+        └── snapshot
+```
+
+However, those segments are still in S3, so we can still consume from those offsets.
+
+```
+$ rpk topic consume thelog -n 3
+{
+  "topic": "thelog",
+  "value": "Thu Apr 28 10:29:21 EDT 2022 1",
+  "timestamp": 1651156161377,
+  "partition": 0,
+  "offset": 2000
+}
+{
+  "topic": "thelog",
+  "value": "Thu Apr 28 10:29:21 EDT 2022 2",
+  "timestamp": 1651156161377,
+  "partition": 0,
+  "offset": 2001
+}
+{
+  "topic": "thelog",
+  "value": "Thu Apr 28 10:29:21 EDT 2022 3",
+  "timestamp": 1651156161377,
+  "partition": 0,
+  "offset": 2002
+}
 ```
