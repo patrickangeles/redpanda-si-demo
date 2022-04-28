@@ -83,11 +83,12 @@ mc mb local/redpanda
 
 ## Create a topic 
 
-You can see what the current directory structure looks like with `tree`
+You can see what the current directory structure looks like with the `tree` command.
 
 ```bash
 tree volumes
 ```
+Create the topic. For now, we want Shadow Indexing disabled.
 
 ```bash
 rpk topic create thelog \
@@ -97,11 +98,7 @@ rpk topic create thelog \
         -c redpanda.remote.write=false
 ```
 
-Look again to see that the directory structure has changed.
-
-```bash
-tree volumes
-```
+Look again to see that the directory structure has changed with `tree volumes`.
 
 ## Produce some data
 
@@ -109,7 +106,41 @@ tree volumes
 BATCH=$(date) ; printf "$BATCH %s\n" {1..1000} | rpk topic produce thelog
 ```
 
-Repeat this a few times, while checking the directory structure with `tree volumes`
+Repeat this a few times, while checking the directory structure with `tree volumes`.
+After producing some data, you should see something that looks like this.
+
+```
+volumes
+├── minio
+│   └── data
+│       └── redpanda
+└── redpanda
+    └── data
+        ├── kafka
+        │   └── thelog
+        │       └── 0_3
+        │           ├── 0-1-v1.base_index
+        │           ├── 0-1-v1.log
+        │           ├── 2001-1-v1.base_index
+        │           ├── 2001-1-v1.log
+        │           ├── 4001-1-v1.base_index
+        │           ├── 4001-1-v1.log
+        │           ├── 6001-1-v1.base_index
+        │           ├── 6001-1-v1.log
+        │           └── archival_metadata.snapshot
+        ├── pid.lock
+        ├── redpanda
+        │   ├── controller
+        │   │   └── 0_0
+        │   │       ├── 0-1-v1.base_index
+        │   │       └── 0-1-v1.log
+        │   └── kvstore
+        │       └── 0_0
+        │           ├── 0-0-v1.base_index
+        │           └── 0-0-v1.log
+        ├── supervisord.log
+        └── wasm_engine.log
+```
 
 ## Enable Shadow Indexing for our topic
 
