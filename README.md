@@ -99,17 +99,10 @@ rpk topic create thelog \
 ```
 
 Look again to see that the directory structure has changed with `tree volumes`.
-
-## Produce some data
-
-```bash
-BATCH=$(date) ; printf "$BATCH %s\n" {1..1000} | rpk topic produce thelog
-```
-
-Repeat this a few times, while checking the directory structure with `tree volumes`.
-After producing some data, you should see something that looks like this.
+You should see something like this.
 
 ```
+$ tree volumes
 volumes
 ├── minio
 │   └── data
@@ -121,12 +114,6 @@ volumes
         │       └── 0_3
         │           ├── 0-1-v1.base_index
         │           ├── 0-1-v1.log
-        │           ├── 2001-1-v1.base_index
-        │           ├── 2001-1-v1.log
-        │           ├── 4001-1-v1.base_index
-        │           ├── 4001-1-v1.log
-        │           ├── 6001-1-v1.base_index
-        │           ├── 6001-1-v1.log
         │           └── archival_metadata.snapshot
         ├── pid.lock
         ├── redpanda
@@ -142,6 +129,83 @@ volumes
         └── wasm_engine.log
 ```
 
+## Produce some data
+
+```bash
+BATCH=$(date) ; printf "$BATCH %s\n" {1..1000} | rpk topic produce thelog
+```
+
+Repeat this a few times, while checking the directory structure with `tree volumes`.
+After producing some data, you should see something that looks like this.
+
+```
+$ tree volumes/redpanda/data/kafka 
+volumes/redpanda/data/kafka
+└── thelog
+    └── 0_3
+        ├── 0-1-v1.base_index
+        ├── 0-1-v1.log
+        ├── 2001-1-v1.base_index
+        ├── 2001-1-v1.log
+        ├── 4001-1-v1.base_index
+        ├── 4001-1-v1.log
+        └── archival_metadata.snapshot
+```
+Consume some data, from the earliest available offset.
+
+```bash
+rpk topic consume thelog -n 3
+```
+Output should look something like this.
+
+```
+{
+  "topic": "thelog",
+  "value": "Thu Apr 28 10:29:19 EDT 2022 1",
+  "timestamp": 1651156159604,
+  "partition": 0,
+  "offset": 0
+}
+{
+  "topic": "thelog",
+  "value": "Thu Apr 28 10:29:19 EDT 2022 2",
+  "timestamp": 1651156159604,
+  "partition": 0,
+  "offset": 1
+}
+{
+  "topic": "thelog",
+  "value": "Thu Apr 28 10:29:19 EDT 2022 3",
+  "timestamp": 1651156159604,
+  "partition": 0,
+  "offset": 2
+}
+```
+
+Keep producing more data, until the offset exceeds ~12000 or so.
+Have a look at the directory structure. You'll notice that the first log segment `0-1-v1.log` is now gone.
+
+```
+$ tree volumes/redpanda/data/kafka
+volumes/redpanda/data/kafka
+└── thelog
+    └── 0_3
+        ├── 10001-1-v1.base_index
+        ├── 10001-1-v1.log
+        ├── 12001-1-v1.base_index
+        ├── 12001-1-v1.log
+        ├── 2001-1-v1.base_index
+        ├── 2001-1-v1.log
+        ├── 4001-1-v1.base_index
+        ├── 4001-1-v1.log
+        ├── 6001-1-v1.base_index
+        ├── 6001-1-v1.log
+        ├── 8001-1-v1.base_index
+        ├── 8001-1-v1.log
+        ├── archival_metadata.snapshot
+        └── snapshot
+```
+
 ## Enable Shadow Indexing for our topic
 
 ```bash
@@ -150,3 +214,51 @@ rpk topic alter-config thelog \
         -s redpanda.remote.write=true
 ```
 
+After a few seconds, then you'll notice that log segments have been uploaded and now show up on MinIO.
+
+```
+$ tree volumes/minio/data
+volumes/minio/data
+└── redpanda
+    ├── 1ebedfeb
+    │   └── kafka
+    │       └── thelog
+    │           └── 0_3
+    │               └── 2001-1-v1.log.1
+    ├── 237ffc6f
+    │   └── kafka
+    │       └── thelog
+    │           └── 0_3
+    │               └── 12001-1-v1.log.1
+    ├── 371013e1
+    │   └── kafka
+    │       └── thelog
+    │           └── 0_3
+    │               └── 4001-1-v1.log.1
+    ├── 3b4f5905
+    │   └── kafka
+    │       └── thelog
+    │           └── 0_3
+    │               └── 6001-1-v1.log.1
+    ├── 9805bcb1
+    │   └── kafka
+    │       └── thelog
+    │           └── 0_3
+    │               └── 8001-1-v1.log.1
+    ├── a0000000
+    │   └── meta
+    │       └── kafka
+    │           └── thelog
+    │               └── 0_3
+    │                   └── manifest.json
+    ├── b0000000
+    │   └── meta
+    │       └── kafka
+    │           └── thelog
+    │               └── topic_manifest.json
+    └── f8ae70fa
+        └── kafka
+            └── thelog
+                └── 0_3
+                    └── 10001-1-v1.log.1
+```
