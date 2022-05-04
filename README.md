@@ -83,9 +83,7 @@ docker compose up -d
 
 ## Set up Minio 
 
-Create an alias and an S3 bucket for Redpanda
-
-We need to create a bucket called `redpanda` for use by Redpanda Shadow Indexing. To do this,
+We need to create a bucket called `redpanda` for use by the Shadow Indexing feature. To do this,
 we use `mc`, but first we need to set up `mc` with an alias to that it can access
 our Docker based MinIO S3 endpoint.
 
