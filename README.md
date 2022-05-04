@@ -1,6 +1,12 @@
 
 # Redpanda Tiered Storage Demo
 
+This project will show you some of the inner workings of Redpanda's log storage system and how it interacts
+with the tiered storage feature (aka Shadow Indexing). 
+
+For details on what Shadow Indexing is and how it works, you can start by reading
+[this blog post](https://redpanda.com/blog/tiered-storage-architecture-shadow-indexing-deep-dive/). 
+
 ## Pre-requisites
 
 To go through this demo, you will need:
@@ -48,7 +54,7 @@ services:
       - ./volumes/minio/data:/data
 
   redpanda:
-    image: docker.vectorized.io/vectorized/redpanda:v21.11.12
+    image: docker.vectorized.io/vectorized/redpanda:v21.11.15
     command:
       - redpanda start
       - --smp 1
