@@ -1,8 +1,8 @@
 
 # Redpanda Tiered Storage Demo
 
-This project will show you some of the inner workings of Redpanda's log storage system and how it interacts
-with the tiered storage feature (aka Shadow Indexing). 
+Redpanda Tiered Storage uses S3 as a data storage layer, and intelligently caches data on local disks to maintain performance benefits.
+This demo uses [MinIO](https://min.io/) for local S3-compatible object storage.
 
 For details on what Shadow Indexing is and how it works, you can start by reading
 [this blog post](https://redpanda.com/blog/tiered-storage-architecture-shadow-indexing-deep-dive/). 
@@ -16,14 +16,45 @@ To go through this demo, you will need:
 * `mc` - MinIO Console
 * `tree` - Optional, for hierarchical directory listing
 
-### Installing Pre-requisites on MacOS
+### Installing Pre-requisites
+
+#### MacOS
 
 ```bash
 brew install redpanda-data/tap/redpanda
 brew install minio/stable/mc
 brew install tree
 ```
- 
+
+#### Ubuntu
+
+```bash
+mkdir ~/bin 2> /dev/null; cd ~/bin
+curl -LO https://github.com/redpanda-data/redpanda/releases/download/v21.11.15/rpk-linux-amd64.zip
+unzip rpk-linux-amd64.zip && rm rpk-linux-amd64.zip
+curl -O https://dl.min.io/client/mc/release/linux-amd64/mc
+chmod +x mc
+sudo apt install tree -y
+```
+
+Add the following to `~/.bashrc` or `~/.zshrc` if needed:
+```bash
+export PATH=$PATH:$HOME/bin
+```
+
+### Get the code
+
+```bash
+git clone https://github.com/patrickangeles/redpanda-si-demo.git
+cd redpanda-si-demo
+```
+
+On Linux, change ownership of the `data` directory (Docker on Mac handles this automatically):
+```bash
+mkdir -p volumes/redpanda/data
+sudo chown -R 101:101 volumes
+```
+
 ## Overview of `docker-compose.yml`
 
 The following `docker-compose.yml` will spin up an instance of Minio and a single-node instance of Redpanda.
@@ -365,4 +396,17 @@ $ rpk topic consume thelog -n 3
   "partition": 0,
   "offset": 2002
 }
+```
+
+### Cleanup
+
+This will bring down minio and redpanda (removing the local bucket):
+```bash
+docker-compose down
+```
+
+Delete the local volume data:
+
+```bash
+sudo rm -r volumes
 ```
