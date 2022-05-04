@@ -20,6 +20,15 @@ brew install tree
  
 ## Overview of `docker-compose.yml`
 
+The following `docker-compose.yml` will spin up an instance of Minio and a single-node instance of Redpanda.
+By default, Redpanda uses `/var/lib/redpanda/data` as its data directory.
+We mount that under `./volumes/redpanda/data` so we can observe changes in the underlying filesystem
+as data is produced, cleaned up, and archived. Same thing for MinIO, where we mount the `/data` directory
+under `./volumes/minio/data`.
+
+Additionally, you'll see that we've enabled Shadow Indexing for Redpanda under the `redpanda.cloud_storage_*` parameters.
+Notice how we pass on the S3 credentials, URI and bucket name to Redpanda.
+
 ```yaml
 version: "3.9"
    
@@ -76,6 +85,10 @@ docker compose up -d
 
 Create an alias and an S3 bucket for Redpanda
 
+We need to create a bucket called `redpanda` for use by Redpanda Shadow Indexing. To do this,
+we use `mc`, but first we need to set up `mc` with an alias to that it can access
+our Docker based MinIO S3 endpoint.
+
 ```bash
 mc alias set local http://localhost:9000 minio minio123
 mc mb local/redpanda
@@ -88,7 +101,7 @@ You can see what the current directory structure looks like with the `tree` comm
 ```bash
 tree volumes
 ```
-Create the topic. For now, we want Shadow Indexing disabled.
+Create the topic. For now, we want Shadow Indexing disabled for this topic.
 
 ```bash
 rpk topic create thelog \
@@ -131,6 +144,8 @@ volumes
 
 ## Produce some data
 
+The following script writes 1000 records at a time to the topic.
+
 ```bash
 BATCH=$(date) ; printf "$BATCH %s\n" {1..1000} | rpk topic produce thelog
 ```
@@ -154,7 +169,7 @@ volumes/redpanda/data/kafka
 Consume some data, from the earliest available offset.
 
 ```bash
-rpk topic consume thelog -n 3
+rpk topic consume thelog -o start -n 3
 ```
 Output should look something like this.
 
@@ -209,7 +224,7 @@ When you consume from the topic, you will no longer see data from the first segm
 Here, our consumer sees offset 2000 as the earliest available.
 
 ```
-$ rpk topic consume thelog -n 3
+$ rpk topic consume thelog -o start -n 3
 {
   "topic": "thelog",
   "value": "Thu Apr 28 10:29:21 EDT 2022 1",
