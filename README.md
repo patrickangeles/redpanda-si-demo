@@ -1,14 +1,30 @@
 
-# Redpanda Tiered Storage Demo
+# Redpanda Tiered Storage and Remote Read Replicas
 
-Redpanda Tiered Storage uses S3 as a data storage layer, and intelligently caches data on local disks to maintain performance benefits.
-This demo uses [MinIO](https://min.io/) for local S3-compatible object storage.
+Tiered Storage is a Redpanda Enterpise feature that allows for low-cost infinite data retention by moving
+log data to an archive while retaining the ability to serve it back to clients. It uses an object store
+for the archive and communicates via the S3 protocol.
 
-For details on what Shadow Indexing is and how it works, you can start by reading
-[this blog post](https://redpanda.com/blog/tiered-storage-architecture-shadow-indexing-deep-dive/). 
+Remote Read Replica is a feature built on top of tiered storage that allows another Redpanda cluster to serve topics
+(in read-only mode) that have been archived to S3. It allows for the dynamic provisioning of read-only topics for
+analytical workloads.
+
+This demo uses Docker Compose. It sets up two single-node Redpanda clusters, with one as the source and the other
+to serve Remote Read Replicas.
+Each cluster has an attached Redpanda Console instance. [MinIO](http://min.io) is used as the object store.
+
+![Docker Compose Setup](./setup.png)
+
+## Related Material
+
+For more information on Tiered Storage and Remote Read Replicas, you can consult the following links.
+* [Shadow Indexing Deep Dive](https://redpanda.com/blog/tiered-storage-architecture-shadow-indexing-deep-dive/)
+* [Remote Read Replicas](https://redpanda.com/blog/remote-read-replicas-for-distributing-work)
+* [Documentation](https://docs.redpanda.com/docs/data-management/)
 
 ## Pre-requisites
 
+This demo uses [MinIO](https://min.io/) for local S3-compatible object storage.
 To go through this demo, you will need:
 
 * Docker
@@ -17,6 +33,9 @@ To go through this demo, you will need:
 * `tree` - Optional, for hierarchical directory listing
 
 ### Installing Pre-requisites
+
+First, make sure you have [Docker Compose](https://docs.docker.com/compose/install/) installed.
+Then you can follow these OS specific instructions to install the rest.
 
 #### MacOS
 
@@ -57,24 +76,25 @@ sudo chown -R 101:101 volumes
 
 ## Overview of `docker-compose.yml`
 
-The following `docker-compose.yml` will spin up an instance of Minio and a single-node instance of Redpanda.
+The following `docker-compose.yml` will spin up an instance of Minio and two single-node instances of Redpanda,
+each with a Console UI.
 By default, Redpanda uses `/var/lib/redpanda/data` as its data directory.
 We mount that under `./volumes/redpanda/data` so we can observe changes in the underlying filesystem
 as data is produced, cleaned up, and archived. Same thing for MinIO, where we mount the `/data` directory
 under `./volumes/minio/data`.
 
-Additionally, you'll see that we've enabled Shadow Indexing for Redpanda under the `redpanda.cloud_storage_*` parameters.
+Additionally, you'll see that we've enabled Tiered Storage for Redpanda under the `redpanda.cloud_storage_*` parameters.
 Notice how we pass on the S3 credentials, URI and bucket name to Redpanda.
 
 ```yaml
-version: "3.9"
-   
+version: '3.7'
 services:
   minio:
     image: quay.io/minio/minio
     command: server --console-address ":9001" /data
     ports:
       - 9000:9000
+      - 9001:9001
     environment:
       MINIO_ROOT_USER: minio
       MINIO_ROOT_PASSWORD: minio123
@@ -85,17 +105,15 @@ services:
       - ./volumes/minio/data:/data
 
   redpanda:
-    image: docker.vectorized.io/vectorized/redpanda:v21.11.15
+    image: docker.redpanda.com/vectorized/redpanda:v22.2.2
     command:
       - redpanda start
       - --smp 1
       - --memory 512M
-      - --reserve-memory 0M
       - --overprovisioned
       - --node-id 0
-      - --set redpanda.auto_create_topics_enabled=false
-      - --kafka-addr INSIDE://0.0.0.0:9094,OUTSIDE://0.0.0.0:9092
-      - --advertise-kafka-addr INSIDE://redpanda:9094,OUTSIDE://localhost:9092
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
       - --set redpanda.cloud_storage_enabled=true
       - --set redpanda.cloud_storage_region=local
       - --set redpanda.cloud_storage_access_key=minio
@@ -107,9 +125,10 @@ services:
       - --set redpanda.cloud_storage_segment_max_upload_interval_sec=30
     ports:
       - 9092:9092
-      - 9644:9644
     volumes:
       - ./volumes/redpanda/data:/var/lib/redpanda/data
+...
+
 ```
 
 ## Start up the Docker Compose
@@ -117,6 +136,13 @@ services:
 ```bash
 docker compose up -d
 ```
+
+Once it comes up, you can see the consoles for the two Redpanda clusters and MinIO:
+* [Redpanda](http://localhost:8080)
+* [Redpanda RRR](http://localhost:8180)
+* [MinIO](http://localhost:9001)
+
+You should also be able to connect to each cluster via the Kafka API on `localhost:9092` and `localhost:9192`.
 
 ## Set up Minio 
 
@@ -400,7 +426,7 @@ $ rpk topic consume thelog -n 3
 
 ### Cleanup
 
-This will bring down minio and redpanda (removing the local bucket):
+This will bring down MinIO and Redpanda (removing the local bucket):
 ```bash
 docker-compose down
 ```
