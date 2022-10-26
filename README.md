@@ -128,7 +128,6 @@ services:
     volumes:
       - ./volumes/redpanda/data:/var/lib/redpanda/data
 ...
-
 ```
 
 ## Start up the Docker Compose
@@ -339,32 +338,7 @@ volumes/minio/data
     │       └── thelog
     │           └── 0_3
     │               └── 4001-1-v1.log.1
-    ├── 3b4f5905
-    │   └── kafka
-    │       └── thelog
-    │           └── 0_3
-    │               └── 6001-1-v1.log.1
-    ├── 9805bcb1
-    │   └── kafka
-    │       └── thelog
-    │           └── 0_3
-    │               └── 8001-1-v1.log.1
-    ├── a0000000
-    │   └── meta
-    │       └── kafka
-    │           └── thelog
-    │               └── 0_3
-    │                   └── manifest.json
-    ├── b0000000
-    │   └── meta
-    │       └── kafka
-    │           └── thelog
-    │               └── topic_manifest.json
-    └── f8ae70fa
-        └── kafka
-            └── thelog
-                └── 0_3
-                    └── 10001-1-v1.log.1
+...
 ```
 
 Now, let's produce more data such that the oldest log segments (starting with offset 2000) start to disappear.
@@ -423,6 +397,27 @@ $ rpk topic consume thelog -n 3
   "offset": 2002
 }
 ```
+
+## Create a Remote Read Replica Topic
+
+Let's create a read replica topic on the second cluster. We do this via the normal
+create topic command, but passing in a `redpanda.remote.readreplica` parameter with
+the value of the S3 bucket name. Note that the topic name (`thelog`) needs to match
+an existing archive topic in the bucket with that same name.
+
+```
+rpk topic create thelog \
+        -c redpanda.remote.readreplica=redpanda \
+        --brokers localhost:9192
+```
+
+Now, try to consume from the read replica topic:
+
+```
+rpk topic consume thelog -n 3 --brokers localhost:9192
+```
+
+That's it!
 
 ### Cleanup
 
