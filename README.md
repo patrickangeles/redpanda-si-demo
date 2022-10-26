@@ -1,6 +1,12 @@
 
 # Redpanda Tiered Storage Demo
 
+Redpanda Tiered Storage uses S3 as a data storage layer, and intelligently caches data on local disks to maintain performance benefits.
+This demo uses [MinIO](https://min.io/) for local S3-compatible object storage.
+
+For details on what Shadow Indexing is and how it works, you can start by reading
+[this blog post](https://redpanda.com/blog/tiered-storage-architecture-shadow-indexing-deep-dive/). 
+
 ## Pre-requisites
 
 To go through this demo, you will need:
@@ -10,15 +16,55 @@ To go through this demo, you will need:
 * `mc` - MinIO Console
 * `tree` - Optional, for hierarchical directory listing
 
-### Installing Pre-requisites on MacOS
+### Installing Pre-requisites
+
+#### MacOS
 
 ```bash
 brew install redpanda-data/tap/redpanda
 brew install minio/stable/mc
 brew install tree
 ```
- 
+
+#### Ubuntu
+
+```bash
+mkdir ~/bin 2> /dev/null; cd ~/bin
+curl -LO https://github.com/redpanda-data/redpanda/releases/download/v21.11.15/rpk-linux-amd64.zip
+unzip rpk-linux-amd64.zip && rm rpk-linux-amd64.zip
+curl -O https://dl.min.io/client/mc/release/linux-amd64/mc
+chmod +x mc
+sudo apt install tree -y
+```
+
+Add the following to `~/.bashrc` or `~/.zshrc` if needed:
+```bash
+export PATH=$PATH:$HOME/bin
+```
+
+### Get the code
+
+```bash
+git clone https://github.com/patrickangeles/redpanda-si-demo.git
+cd redpanda-si-demo
+```
+
+On Linux, change ownership of the `data` directory (Docker on Mac handles this automatically):
+```bash
+mkdir -p volumes/redpanda/data
+sudo chown -R 101:101 volumes
+```
+
 ## Overview of `docker-compose.yml`
+
+The following `docker-compose.yml` will spin up an instance of Minio and a single-node instance of Redpanda.
+By default, Redpanda uses `/var/lib/redpanda/data` as its data directory.
+We mount that under `./volumes/redpanda/data` so we can observe changes in the underlying filesystem
+as data is produced, cleaned up, and archived. Same thing for MinIO, where we mount the `/data` directory
+under `./volumes/minio/data`.
+
+Additionally, you'll see that we've enabled Shadow Indexing for Redpanda under the `redpanda.cloud_storage_*` parameters.
+Notice how we pass on the S3 credentials, URI and bucket name to Redpanda.
 
 ```yaml
 version: "3.9"
@@ -39,7 +85,7 @@ services:
       - ./volumes/minio/data:/data
 
   redpanda:
-    image: docker.vectorized.io/vectorized/redpanda:v21.11.12
+    image: docker.vectorized.io/vectorized/redpanda:v21.11.15
     command:
       - redpanda start
       - --smp 1
@@ -74,7 +120,9 @@ docker compose up -d
 
 ## Set up Minio 
 
-Create an alias and an S3 bucket for Redpanda
+We need to create a bucket called `redpanda` for use by the Shadow Indexing feature. To do this,
+we use `mc`, but first we need to set up `mc` with an alias to that it can access
+our Docker based MinIO S3 endpoint.
 
 ```bash
 mc alias set local http://localhost:9000 minio minio123
@@ -88,7 +136,7 @@ You can see what the current directory structure looks like with the `tree` comm
 ```bash
 tree volumes
 ```
-Create the topic. For now, we want Shadow Indexing disabled.
+Create the topic. For now, we want Shadow Indexing disabled for this topic.
 
 ```bash
 rpk topic create thelog \
@@ -131,6 +179,8 @@ volumes
 
 ## Produce some data
 
+The following script writes 1000 records at a time to the topic.
+
 ```bash
 BATCH=$(date) ; printf "$BATCH %s\n" {1..1000} | rpk topic produce thelog
 ```
@@ -154,7 +204,7 @@ volumes/redpanda/data/kafka
 Consume some data, from the earliest available offset.
 
 ```bash
-rpk topic consume thelog -n 3
+rpk topic consume thelog -o start -n 3
 ```
 Output should look something like this.
 
@@ -209,7 +259,7 @@ When you consume from the topic, you will no longer see data from the first segm
 Here, our consumer sees offset 2000 as the earliest available.
 
 ```
-$ rpk topic consume thelog -n 3
+$ rpk topic consume thelog -o start -n 3
 {
   "topic": "thelog",
   "value": "Thu Apr 28 10:29:21 EDT 2022 1",
@@ -346,4 +396,17 @@ $ rpk topic consume thelog -n 3
   "partition": 0,
   "offset": 2002
 }
+```
+
+### Cleanup
+
+This will bring down minio and redpanda (removing the local bucket):
+```bash
+docker-compose down
+```
+
+Delete the local volume data:
+
+```bash
+sudo rm -r volumes
 ```
