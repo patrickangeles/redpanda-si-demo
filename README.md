@@ -419,7 +419,7 @@ rpk topic consume thelog -n 3 --brokers localhost:9192
 
 That's it!
 
-### Cleanup
+## Cleanup
 
 This will bring down MinIO and Redpanda (removing the local bucket):
 ```bash
