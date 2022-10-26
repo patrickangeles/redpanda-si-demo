@@ -1,11 +1,11 @@
-version: "3.9"
-   
+version: '3.7'
 services:
   minio:
     image: quay.io/minio/minio
     command: server --console-address ":9001" /data
     ports:
       - 9000:9000
+      - 9001:9001
     environment:
       MINIO_ROOT_USER: minio
       MINIO_ROOT_PASSWORD: minio123
@@ -16,17 +16,15 @@ services:
       - ./volumes/minio/data:/data
 
   redpanda:
-    image: docker.vectorized.io/vectorized/redpanda:v21.11.13
+    image: docker.redpanda.com/vectorized/redpanda:v22.2.2
     command:
       - redpanda start
       - --smp 1
       - --memory 512M
-      - --reserve-memory 0M
       - --overprovisioned
       - --node-id 0
-      - --set redpanda.auto_create_topics_enabled=false
-      - --kafka-addr INSIDE://0.0.0.0:9094,OUTSIDE://0.0.0.0:9092
-      - --advertise-kafka-addr INSIDE://redpanda:9094,OUTSIDE://localhost:9092
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
       - --set redpanda.cloud_storage_enabled=true
       - --set redpanda.cloud_storage_region=local
       - --set redpanda.cloud_storage_access_key=minio
@@ -40,3 +38,64 @@ services:
       - 9092:9092
     volumes:
       - ./volumes/redpanda/data:/var/lib/redpanda/data
+
+  console:
+    image: docker.redpanda.com/vectorized/console:latest
+    entrypoint: /bin/sh
+    command: -c "echo \"$$CONSOLE_CONFIG_FILE\" > /tmp/config.yml; /app/console"
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:29092"]
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://redpanda:9644"]
+    ports:
+      - 8080:8080
+    depends_on:
+      - redpanda
+
+  redpanda-rrr:
+    image: docker.redpanda.com/vectorized/redpanda:v22.2.2
+    command:
+      - redpanda start
+      - --smp 1
+      - --memory 512M
+      - --overprovisioned
+      - --node-id 0
+      - --kafka-addr PLAINTEXT://0.0.0.0:29192,OUTSIDE://0.0.0.0:9192
+      - --advertise-kafka-addr PLAINTEXT://redpanda-rrr:29192,OUTSIDE://localhost:9192
+      - --set redpanda.admin.port=9744
+      - --set redpanda.cloud_storage_enabled=true
+      - --set redpanda.cloud_storage_region=local
+      - --set redpanda.cloud_storage_access_key=minio
+      - --set redpanda.cloud_storage_secret_key=minio123
+      - --set redpanda.cloud_storage_api_endpoint=minio
+      - --set redpanda.cloud_storage_api_endpoint_port=9000
+      - --set redpanda.cloud_storage_disable_tls=true
+      - --set redpanda.cloud_storage_bucket=redpanda
+      - --set redpanda.cloud_storage_segment_max_upload_interval_sec=30
+    ports:
+      - 9192:9192
+    volumes:
+      - ./volumes/redpanda-rrr/data:/var/lib/redpanda/data
+
+  console-rrr:
+    image: docker.redpanda.com/vectorized/console:latest
+    entrypoint: /bin/sh
+    command: -c "echo \"$$CONSOLE_CONFIG_FILE\" > /tmp/config.yml; /app/console"
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda-rrr:29192"]
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://redpanda-rrr:9744"]
+    ports:
+      - 8180:8080
+    depends_on:
+      - redpanda-rrr
