@@ -145,8 +145,8 @@ You should also be able to connect to each cluster via the Kafka API on `localho
 
 ## Set up Minio 
 
-We need to create a bucket called `redpanda` for use by the Shadow Indexing feature. To do this,
-we use `mc`, but first we need to set up `mc` with an alias to that it can access
+We need to create a bucket called `redpanda` for use by Redpanda as the archive location. To do this,
+we use `mc`, but first we need to set up `mc` with an alias so that it can access
 our Docker based MinIO S3 endpoint.
 
 ```bash
@@ -161,7 +161,7 @@ You can see what the current directory structure looks like with the `tree` comm
 ```bash
 tree volumes
 ```
-Create the topic. For now, we want Shadow Indexing disabled for this topic.
+Create the topic. For now, we want tiered storage disabled for this topic.
 
 ```bash
 rpk topic create thelog \
